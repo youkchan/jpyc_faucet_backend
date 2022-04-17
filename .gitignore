@@ -1,0 +1,5 @@
+.env
+.env.local
+.env.prod
+*.swp
+node_modules

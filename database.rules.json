@@ -1,0 +1,12 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "twitterAccountList": {
+      ".indexOn": ["account"]
+    },
+    "addressList": {
+      ".indexOn": ["address"]
+    }
+  }
+}
