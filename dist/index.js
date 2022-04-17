@@ -95,7 +95,10 @@ provider.engine._blockTracker._pollingInterval = 1800000;
 var web3 = new web3_1["default"](provider);
 var app = express();
 app.use(cors({
-    origin: process.env.APPURL
+    origin: [
+        'http://localhost:8080',
+        'https://jpyc-faucet.web.app'
+    ]
 }));
 var address_whitelist = [];
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -180,7 +183,8 @@ app.post("/", function (req, res) { return __awaiter(void 0, void 0, void 0, fun
                 response = {
                     status: "error",
                     code: 99,
-                    message: "Unexpected ERROR!"
+                    //message: "Unexpected ERROR!"
+                    message: e_1.message
                 };
                 res.json(JSON.stringify(response));
                 return [3 /*break*/, 8];
@@ -394,4 +398,10 @@ var getValidAddressFromRequest = function (res, tweetId) { return __awaiter(void
         }
     });
 }); };
+var logJSON = function (logLevel, message) {
+    return JSON.stringify({
+        severity: logLevel,
+        message: message
+    });
+};
 //# sourceMappingURL=index.js.map

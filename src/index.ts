@@ -10,7 +10,6 @@ import * as admin from "firebase-admin";
 dotenv.config();
 const PORT = Number(process.env.PORT) || 8081;
 const CRON_ENV = process.env.CRON_ENV;
-//const BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAAGpwbAEAAAAAFjGVXZf7P3TxBU1vTAm%2FW8nFF4M%3Dpwd9HyDyLGvkUFJQW8QMkpqcge5WI5IQU7ISDqNH0CrjijA5tH";
 const BEARER_TOKEN = process.env.BEARER_TOKEN;
 const TWITTER_URL = "https://api.twitter.com/2";
 const TIPBOT_ID = "1474541604673560578";
@@ -37,7 +36,10 @@ const web3 = new Web3(provider);
 const app = express();
 app.use(cors(
     {
-        origin: process.env.APPURL
+        origin: [
+            'http://localhost:8080',
+            'https://jpyc-faucet.web.app'
+        ]
     },
 ));
 const address_whitelist = [
@@ -48,6 +50,7 @@ app.use(bodyParser.json());
 
 app.post("/", async (req, res) => {
     try {
+        //res.header('Access-Control-Allow-Origin', process.env.APPURL as string)
         const tweet = req.body.tweet
         const parse = url.parse(tweet).pathname.split("/")
         const twitterAuthorID = await getTwitterAccountFromRequest(res, parse[3]);
@@ -74,7 +77,6 @@ app.post("/", async (req, res) => {
             };
 
             res.json(JSON.stringify(response));
-            //res.json('{ status: "error", code: 30, message: "Twitter Account Exceeded Limit!" }');
             return;
         }
 
@@ -87,7 +89,6 @@ app.post("/", async (req, res) => {
             };
 
             res.json(JSON.stringify(response));
-            //res.json('{ status: "error", code: 40, message: "Invalid Request" }');
             return;
         }
         //const address = "0xfc976D96ccc57bC9D04AeA92A4a66Abd71926298";
@@ -120,16 +121,15 @@ app.post("/", async (req, res) => {
 
         res.json(JSON.stringify(response));
 
-        //res.json('{ status: "ok", code: 10, message: "Sent assets to address!" }');
-    } catch(e) {
+    } catch(e: any) {
         const response = {
             status: "error", 
             code: 99, 
-            message: "Unexpected ERROR!"
+            //message: "Unexpected ERROR!"
+            message: e.message 
         };
 
         res.json(JSON.stringify(response));
-        //res.json('{ status: "error", code: 99, message: "Unexpected ERROR!" }');
     }
 
 });
@@ -303,3 +303,10 @@ const getValidAddressFromRequest = async (res: any, tweetId: string) => {
 
 };
 
+
+const logJSON = (logLevel : string , message : string) => {
+  return JSON.stringify({
+    severity: logLevel,
+    message: message,
+  });
+}

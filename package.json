@@ -14,6 +14,7 @@
     "start": "node ./dist/index.js",
     "start:local": "bash switch_env.sh l && tsc -p . && npm start",
     "deploy": "gcloud app deploy",
+    "deploy:prod": "bash switch_env.sh p && tsc -p . && gcloud app deploy app.yaml",
     "gcp-build": "tsc -p ."
   },
   "author": "",
