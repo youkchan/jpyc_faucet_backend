@@ -7,15 +7,18 @@ const url = require('url')
 const bodyParser = require('body-parser');
 import * as dotenv from "dotenv";
 import * as admin from "firebase-admin";
+import constant from './constant'
 dotenv.config();
 const PORT = Number(process.env.PORT) || 8081;
-const CRON_ENV = process.env.CRON_ENV;
 const BEARER_TOKEN = process.env.BEARER_TOKEN;
 const TWITTER_URL = "https://api.twitter.com/2";
+const GOOGLE_RECAPTCHA_URL = "https://www.google.com/recaptcha/api/siteverify";
+const SCAN_URL = "https://api.polygonscan.com/api?module=gastracker&action=gasoracle&apikey=";
 const TIPBOT_ID = "1474541604673560578";
-const REQUEST_ACCEPTED = "JPYCの出金リクエストを受け付けました";
-const THRESHOLD_BALANCE = "100000000000000000";
-const SEND_AMOUNT = "100000000000000000";
+const THRESHOLD_BALANCE = "10000000000000000";
+const SEND_AMOUNT = "20000000000000000";
+const FIREBASE_TWITTER_ACCOUNTS_REF = "twitterAccountList";
+const FIREBASE_ADDRESSES_REF = "addressList";
 
 admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -25,8 +28,8 @@ var db = admin.database();
 
 const provider = new HDWalletProvider({
   mnemonic: process.env.MNEMONIC,
-  providerOrUrl: process.env.PROVIDER_MUMBAI,
-  chainId: 80001,
+  providerOrUrl: process.env.PROVIDER_POLYGON,
+  chainId: 137,
 });
 provider.engine._blockTracker._pollingInterval = 1800000;
 
@@ -37,8 +40,7 @@ const app = express();
 app.use(cors(
     {
         origin: [
-            'http://localhost:8080',
-            'https://jpyc-faucet.web.app'
+            process.env.APPURL
         ]
     },
 ));
@@ -50,30 +52,44 @@ app.use(bodyParser.json());
 
 app.post("/", async (req, res) => {
     try {
-        //res.header('Access-Control-Allow-Origin', process.env.APPURL as string)
+
         const tweet = req.body.tweet
+        const token = req.body.token
         const parse = url.parse(tweet).pathname.split("/")
         const twitterAuthorID = await getTwitterAccountFromRequest(res, parse[3]);
-        if(twitterAuthorID == 0){
+       
+        const result = await axios.post(GOOGLE_RECAPTCHA_URL + "?secret=" + process.env.SITESECRET + "&response=" + token);
+        if(!result.data.success) {
             const response = {
                 status: "error", 
                 code: 20, 
-                message: "Invalid URL"
+                message: constant.INVALID_RECAPTCHA
             };
 
-            //res.json('{ "status": "error", "code": 20, "message": "Invalid URL" }');
+            res.json(JSON.stringify(response));
+            return;
+
+        }
+
+        if(twitterAuthorID == 0){
+            const response = {
+                status: "error", 
+                code: 30, 
+                message: constant.INVALID_PARAMETER_URL
+            };
+
             res.json(JSON.stringify(response));
             return;
         }
 
-        const twitterAccountListRef = db.ref("twitterAccountList").orderByChild("account").equalTo(String(twitterAuthorID));
+        const twitterAccountListRef = db.ref(FIREBASE_TWITTER_ACCOUNTS_REF).orderByChild("account").equalTo(String(twitterAuthorID));
         const twitterAccountSnapshot = await twitterAccountListRef.get();
 
         if(twitterAccountSnapshot.exists()){
             const response = {
                 status: "error", 
-                code: 30, 
-                message: "Twitter Account Exceeded Limit!"
+                code: 40, 
+                message: constant.EXCEED_TWITTER_ACCOUNT_LIMITATION
             };
 
             res.json(JSON.stringify(response));
@@ -81,33 +97,51 @@ app.post("/", async (req, res) => {
         }
 
         const address = await getValidAddressFromRequest(res, parse[3]);
-        if(!address){
+        if(address == null){
             const response = {
                 status: "error", 
-                code: 40, 
-                message: "Invalid Request"
+                code: 50, 
+                message: constant.INVALID_PARAMETER_URL
             };
 
             res.json(JSON.stringify(response));
             return;
         }
-        //const address = "0xfc976D96ccc57bC9D04AeA92A4a66Abd71926298";
 
-        const addressListRef = db.ref("addressList").orderByChild("address").equalTo(address);
+        if(await isEnoughBalance(address)) {
+            const response = {
+                status: "error", 
+                code: 60, 
+                message: constant.EXCEED_MATIC_TOKEN_LIMITATION
+            };
+
+            res.json(JSON.stringify(response));
+            return;
+        }
+
+        const addressListRef = db.ref(FIREBASE_ADDRESSES_REF).orderByChild("address").equalTo(address);
         const addressSnapshot = await addressListRef.get();
         if(addressSnapshot.exists()){
+            const response = {
+                status: "error", 
+                code: 70, 
+                message: constant.EXCEED_ADDESS_LIMITATION
+            };
+
+            res.json(JSON.stringify(response));
+            return;
         }
 
 
-        //await sendGas(address);
-        await pushData(db.ref("twitterAccountList"), 
+        const tx = await sendGas(String(address));
+        await pushData(db.ref(FIREBASE_TWITTER_ACCOUNTS_REF), 
             {
               account: String(twitterAuthorID),
               timestamp: Date.now(),
             }
         );
 
-        await pushData(db.ref("addressList"), 
+        await pushData(db.ref(FIREBASE_ADDRESSES_REF), 
             {
               address: address,
               timestamp: Date.now(),
@@ -116,16 +150,17 @@ app.post("/", async (req, res) => {
         const response = {
             status: "ok", 
             code: 10, 
-            message: "Sent assets to address!"
+            txId: tx.transactionHash, 
+            message: constant.SENT_TOKEN
         };
 
         res.json(JSON.stringify(response));
 
     } catch(e: any) {
+        console.log(e);
         const response = {
             status: "error", 
             code: 99, 
-            //message: "Unexpected ERROR!"
             message: e.message 
         };
 
@@ -133,28 +168,6 @@ app.post("/", async (req, res) => {
     }
 
 });
-
-/*app.get("/", async (req, res) => {
-
-    //const tweet = "https://twitter.com/nuko973663/status/1509018961509175298?s=20&t=THqWaA_pHtb4KbHNSqLSbw"
-    //const txid = "0x85a1b2a082f6eab46839f06631864071c42991c6a5ead49cea38cda553240e2f";
-    //await validateTx(res, txid); 
-    const tweet = req.query.tweet
-    const parse = url.parse(tweet).pathname.split("/")
-    const address = await getValidAddressFromRequest(res, parse[3]);
-    if(!address){
-        res.json('{ status: "error", result: "invalid request" }');
-        return;
-    }
-    await sendGas(address);
-    res.json('{ status: "ok", result: "sent assets to address" }');
-    //txidで検索
-    //whitelistのアドレスから送金があるかどうか確認
-    //署名を検証してアドレス取得
-    //アドレスのmatic残高を確認0.1以下じゃないと使えない
-    //アドレスにmaticを送金
-    //txidを保存（二回使えない様に
-});*/
 
 const server = app.listen(PORT, () => {
   console.log(`App listening on port ${PORT}`);
@@ -167,16 +180,28 @@ const pushData = async (dbRef: any, data: object) => {
 const sendGas = async (address: string) => {
     const accounts = await web3.eth.getAccounts();
     const nonce = await web3.eth.getTransactionCount(accounts[0]);
+    let gasPrice = await web3.eth.getGasPrice()
     try {
+
+        try {
+          const gasTracker = await axios.get(SCAN_URL + process.env.SCANKEY);
+          const fastGasPrice = await web3.utils.toWei(gasTracker.data.result.FastGasPrice, 'gwei');
+          gasPrice = fastGasPrice.toString(10);
+        } catch (e) {
+            /* no execution. use default */
+        }
         const tx = await web3.eth.sendTransaction({
           from: accounts[0],
           to: address,
           value: SEND_AMOUNT,
+          gasPrice: gasPrice,
           nonce: nonce,
         }); 
         console.log(tx);
+        return tx;
     } catch (e) {
-        throw new Error('Tx cant send...');
+        console.log(e);
+        throw new Error(constant.FAILED_TO_SEND_TX);
     }
 }
 
@@ -216,7 +241,7 @@ const isRequestAccepted = (tweets: Array<any>, originalTweetIndex: number) => {
             continue;
         }
 
-        const startIndex = conversation.text.indexOf(REQUEST_ACCEPTED);
+        const startIndex = conversation.text.indexOf(constant.REQUEST_ACCEPTED);
         if(startIndex == -1) {
             continue;
         }
@@ -247,11 +272,6 @@ const isNumber = (val: string) => {
   return regexp.test(val);
 }
 
-/*const validateTx = async (res: any, txid: string) => {
-    const tx = await web3.eth.getTransaction(txid);
-    console.log(tx);
-};*/
-
 const getTwitterAccountFromRequest = async (res: any, tweetId: string) => {
     try {
         const response = await axios.get(TWITTER_URL + '/tweets?ids=' + tweetId + "&expansions=author_id" , {
@@ -276,10 +296,12 @@ const getValidAddressFromRequest = async (res: any, tweetId: string) => {
         });
 
         const body = response.data.data;
+
         const address = await getWithdrawalAddressFromTweet(body[0].text);
         if(address == null){
-            return false;
+            return null;
         }
+
         const conversationResponse = await axios.get(TWITTER_URL + '/tweets/search/recent?query=conversation_id:' + body[0].conversation_id + "&tweet.fields=author_id", {
           headers: {
             Authorization: `Bearer ${BEARER_TOKEN}`,
@@ -287,18 +309,20 @@ const getValidAddressFromRequest = async (res: any, tweetId: string) => {
         })
         const length = conversationResponse.data.data.length;
         const originalTweetIndex = findOriginalTweetIndex(conversationResponse.data.data, tweetId, body[0].conversation_id);
+
         if(originalTweetIndex == -1) {
-            return false;
+            return null;
         }
 
         const isAccepted = isRequestAccepted(conversationResponse.data.data, originalTweetIndex) ;
 
-        if(await isEnoughBalance(address)) {
-            return false;
+        if(!isAccepted) {
+            return null;
         }
+
         return address;
     } catch (e) {
-        return false;
+        return null;
     }
 
 };

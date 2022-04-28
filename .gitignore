@@ -3,3 +3,4 @@
 .env.prod
 *.swp
 node_modules
+/dist
