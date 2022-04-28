@@ -16,6 +16,7 @@ const GOOGLE_RECAPTCHA_URL = "https://www.google.com/recaptcha/api/siteverify";
 const SCAN_URL = "https://api.polygonscan.com/api?module=gastracker&action=gasoracle&apikey=";
 const TIPBOT_ID = "1474541604673560578";
 const THRESHOLD_BALANCE = "10000000000000000";
+const SUFFICIENT_BALANCE = "100000000000000000";
 const SEND_AMOUNT = "20000000000000000";
 const FIREBASE_TWITTER_ACCOUNTS_REF = "twitterAccountList";
 const FIREBASE_ADDRESSES_REF = "addressList";
@@ -56,8 +57,19 @@ app.post("/", async (req, res) => {
         const tweet = req.body.tweet
         const token = req.body.token
         const parse = url.parse(tweet).pathname.split("/")
-        const twitterAuthorID = await getTwitterAccountFromRequest(res, parse[3]);
        
+        if(!(await isBalanceSufficient())){
+            const response = {
+                status: "error", 
+                code: 80, 
+                message: constant.INSUFFICIENT_FUNDS
+            };
+
+            res.json(JSON.stringify(response));
+            return;
+        }
+
+
         const result = await axios.post(GOOGLE_RECAPTCHA_URL + "?secret=" + process.env.SITESECRET + "&response=" + token);
         if(!result.data.success) {
             const response = {
@@ -71,6 +83,7 @@ app.post("/", async (req, res) => {
 
         }
 
+        const twitterAuthorID = await getTwitterAccountFromRequest(res, parse[3]);
         if(twitterAuthorID == 0){
             const response = {
                 status: "error", 
@@ -231,6 +244,13 @@ const isEnoughBalance = async (address: string) => {
     const balance = await web3.eth.getBalance(address);
     return balance >= THRESHOLD_BALANCE;
 }
+
+const isBalanceSufficient = async () => {
+    const accounts = await web3.eth.getAccounts();
+    const balance = await web3.eth.getBalance(accounts[0]);
+    return balance >= SUFFICIENT_BALANCE;
+}
+
 
 const isRequestAccepted = (tweets: Array<any>, originalTweetIndex: number) => {
     const length = tweets.length;

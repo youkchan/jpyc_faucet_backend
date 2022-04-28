@@ -7,6 +7,7 @@ const constant =  Object.create({
     EXCEED_ADDESS_LIMITATION: "一つのアドレスで利用できる回数には制限があります",
     SENT_TOKEN: "トークンを送信しました!",
     FAILED_TO_SEND_TX: 'トランザクション 送信に失敗しました...',
+    INSUFFICIENT_FUNDS: '残高が不足しています',
 });
 
 export default Object.freeze(constant);

@@ -80,6 +80,7 @@ var GOOGLE_RECAPTCHA_URL = "https://www.google.com/recaptcha/api/siteverify";
 var SCAN_URL = "https://api.polygonscan.com/api?module=gastracker&action=gasoracle&apikey=";
 var TIPBOT_ID = "1474541604673560578";
 var THRESHOLD_BALANCE = "10000000000000000";
+var SUFFICIENT_BALANCE = "100000000000000000";
 var SEND_AMOUNT = "20000000000000000";
 var FIREBASE_TWITTER_ACCOUNTS_REF = "twitterAccountList";
 var FIREBASE_ADDRESSES_REF = "addressList";
@@ -105,101 +106,112 @@ var address_whitelist = [];
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.post("/", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var tweet, token, parse, twitterAuthorID, result, response_1, response_2, twitterAccountListRef, twitterAccountSnapshot, response_3, address, response_4, response_5, addressListRef, addressSnapshot, response_6, tx, response, e_1, response;
+    var tweet, token, parse, response_1, result, response_2, twitterAuthorID, response_3, twitterAccountListRef, twitterAccountSnapshot, response_4, address, response_5, response_6, addressListRef, addressSnapshot, response_7, tx, response, e_1, response;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                _a.trys.push([0, 10, , 11]);
+                _a.trys.push([0, 11, , 12]);
                 tweet = req.body.tweet;
                 token = req.body.token;
                 parse = url.parse(tweet).pathname.split("/");
-                return [4 /*yield*/, getTwitterAccountFromRequest(res, parse[3])];
+                return [4 /*yield*/, isBalanceSufficient()];
             case 1:
-                twitterAuthorID = _a.sent();
-                return [4 /*yield*/, axios.post(GOOGLE_RECAPTCHA_URL + "?secret=" + process.env.SITESECRET + "&response=" + token)];
-            case 2:
-                result = _a.sent();
-                if (!result.data.success) {
+                if (!(_a.sent())) {
                     response_1 = {
                         status: "error",
-                        code: 20,
-                        message: constant_1["default"].INVALID_RECAPTCHA
+                        code: 80,
+                        message: constant_1["default"].INSUFFICIENT_FUNDS
                     };
                     res.json(JSON.stringify(response_1));
                     return [2 /*return*/];
                 }
-                if (twitterAuthorID == 0) {
+                return [4 /*yield*/, axios.post(GOOGLE_RECAPTCHA_URL + "?secret=" + process.env.SITESECRET + "&response=" + token)];
+            case 2:
+                result = _a.sent();
+                if (!result.data.success) {
                     response_2 = {
                         status: "error",
-                        code: 30,
-                        message: constant_1["default"].INVALID_PARAMETER_URL
+                        code: 20,
+                        message: constant_1["default"].INVALID_RECAPTCHA
                     };
                     res.json(JSON.stringify(response_2));
                     return [2 /*return*/];
                 }
-                twitterAccountListRef = db.ref(FIREBASE_TWITTER_ACCOUNTS_REF).orderByChild("account").equalTo(String(twitterAuthorID));
-                return [4 /*yield*/, twitterAccountListRef.get()];
+                return [4 /*yield*/, getTwitterAccountFromRequest(res, parse[3])];
             case 3:
-                twitterAccountSnapshot = _a.sent();
-                if (twitterAccountSnapshot.exists()) {
+                twitterAuthorID = _a.sent();
+                if (twitterAuthorID == 0) {
                     response_3 = {
                         status: "error",
-                        code: 40,
-                        message: constant_1["default"].EXCEED_TWITTER_ACCOUNT_LIMITATION
+                        code: 30,
+                        message: constant_1["default"].INVALID_PARAMETER_URL
                     };
                     res.json(JSON.stringify(response_3));
                     return [2 /*return*/];
                 }
-                return [4 /*yield*/, getValidAddressFromRequest(res, parse[3])];
+                twitterAccountListRef = db.ref(FIREBASE_TWITTER_ACCOUNTS_REF).orderByChild("account").equalTo(String(twitterAuthorID));
+                return [4 /*yield*/, twitterAccountListRef.get()];
             case 4:
-                address = _a.sent();
-                if (address == null) {
+                twitterAccountSnapshot = _a.sent();
+                if (twitterAccountSnapshot.exists()) {
                     response_4 = {
                         status: "error",
-                        code: 50,
-                        message: constant_1["default"].INVALID_PARAMETER_URL
+                        code: 40,
+                        message: constant_1["default"].EXCEED_TWITTER_ACCOUNT_LIMITATION
                     };
                     res.json(JSON.stringify(response_4));
                     return [2 /*return*/];
                 }
-                return [4 /*yield*/, isEnoughBalance(address)];
+                return [4 /*yield*/, getValidAddressFromRequest(res, parse[3])];
             case 5:
-                if (_a.sent()) {
+                address = _a.sent();
+                if (address == null) {
                     response_5 = {
                         status: "error",
-                        code: 60,
-                        message: constant_1["default"].EXCEED_MATIC_TOKEN_LIMITATION
+                        code: 50,
+                        message: constant_1["default"].INVALID_PARAMETER_URL
                     };
                     res.json(JSON.stringify(response_5));
                     return [2 /*return*/];
                 }
-                addressListRef = db.ref(FIREBASE_ADDRESSES_REF).orderByChild("address").equalTo(address);
-                return [4 /*yield*/, addressListRef.get()];
+                return [4 /*yield*/, isEnoughBalance(address)];
             case 6:
-                addressSnapshot = _a.sent();
-                if (addressSnapshot.exists()) {
+                if (_a.sent()) {
                     response_6 = {
                         status: "error",
-                        code: 70,
-                        message: constant_1["default"].EXCEED_ADDESS_LIMITATION
+                        code: 60,
+                        message: constant_1["default"].EXCEED_MATIC_TOKEN_LIMITATION
                     };
                     res.json(JSON.stringify(response_6));
                     return [2 /*return*/];
                 }
-                return [4 /*yield*/, sendGas(String(address))];
+                addressListRef = db.ref(FIREBASE_ADDRESSES_REF).orderByChild("address").equalTo(address);
+                return [4 /*yield*/, addressListRef.get()];
             case 7:
+                addressSnapshot = _a.sent();
+                if (addressSnapshot.exists()) {
+                    response_7 = {
+                        status: "error",
+                        code: 70,
+                        message: constant_1["default"].EXCEED_ADDESS_LIMITATION
+                    };
+                    res.json(JSON.stringify(response_7));
+                    return [2 /*return*/];
+                }
+                return [4 /*yield*/, sendGas(String(address))];
+            case 8:
                 tx = _a.sent();
                 return [4 /*yield*/, pushData(db.ref(FIREBASE_TWITTER_ACCOUNTS_REF), {
                         account: String(twitterAuthorID),
                         timestamp: Date.now()
                     })];
-            case 8:
+            case 9:
                 _a.sent();
                 return [4 /*yield*/, pushData(db.ref(FIREBASE_ADDRESSES_REF), {
                         address: address,
                         timestamp: Date.now()
                     })];
-            case 9:
+            case 10:
                 _a.sent();
                 response = {
                     status: "ok",
@@ -208,8 +220,8 @@ app.post("/", function (req, res) { return __awaiter(void 0, void 0, void 0, fun
                     message: constant_1["default"].SENT_TOKEN
                 };
                 res.json(JSON.stringify(response));
-                return [3 /*break*/, 11];
-            case 10:
+                return [3 /*break*/, 12];
+            case 11:
                 e_1 = _a.sent();
                 console.log(e_1);
                 response = {
@@ -218,8 +230,8 @@ app.post("/", function (req, res) { return __awaiter(void 0, void 0, void 0, fun
                     message: e_1.message
                 };
                 res.json(JSON.stringify(response));
-                return [3 /*break*/, 11];
-            case 11: return [2 /*return*/];
+                return [3 /*break*/, 12];
+            case 12: return [2 /*return*/];
         }
     });
 }); });
@@ -317,6 +329,20 @@ var isEnoughBalance = function (address) { return __awaiter(void 0, void 0, void
             case 1:
                 balance = _a.sent();
                 return [2 /*return*/, balance >= THRESHOLD_BALANCE];
+        }
+    });
+}); };
+var isBalanceSufficient = function () { return __awaiter(void 0, void 0, void 0, function () {
+    var accounts, balance;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4 /*yield*/, web3.eth.getAccounts()];
+            case 1:
+                accounts = _a.sent();
+                return [4 /*yield*/, web3.eth.getBalance(accounts[0])];
+            case 2:
+                balance = _a.sent();
+                return [2 /*return*/, balance >= SUFFICIENT_BALANCE];
         }
     });
 }); };
